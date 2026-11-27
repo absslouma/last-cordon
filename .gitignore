@@ -16,4 +16,4 @@ Thumbs.db
 *.log
 
 # demo video output (large; publish it on social media, not in the repo)
-video/
+/video/
