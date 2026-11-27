@@ -3,17 +3,24 @@
 // Gunshots are layered (crack / body / thump), low-passed and delayed by distance, with a
 // generated-impulse reverb tail. Safe to call before the context exists or while it is suspended.
 
-export function createAudio() {
+// opts.ctx: an OfflineAudioContext to render into (video export); setTime(t) then schedules calls at t.
+export function createAudio(opts = {}) {
+  const offline = !!opts.ctx;
+  let tBase = null;
   let ctx = null, master = null, wet = null, noise = null, ready = false;
   let humGain = null, humFilter = null, windGain = null, ambGain = null, crackleT = 0, birdT = 4;
   const lis = { x: 0, y: 0, z: 0, rx: 1, rz: 0 };
   let voices = 0;
+  const now = () => (tBase != null ? tBase : ctx.currentTime);
 
   function init() {
     if (ctx) return true;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return false;
-    try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { return false; }
+    if (offline) ctx = opts.ctx;
+    else {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { return false; }
+    }
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 18; comp.ratio.value = 5; comp.attack.value = 0.003; comp.release.value = 0.18;
     master = ctx.createGain(); master.gain.value = 0.85;
@@ -51,7 +58,7 @@ export function createAudio() {
     return true;
   }
   function resume() { if (!init()) return; if (ctx.state === 'suspended') ctx.resume().catch(() => {}); }
-  const ok = () => ready && ctx.state === 'running' && voices < 70;
+  const ok = () => ready && (offline || (ctx.state === 'running' && voices < 70));
 
   function out(pan) {
     const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan || 0));
@@ -59,7 +66,7 @@ export function createAudio() {
     return p;
   }
   function burst(o) { // filtered noise with an exponential envelope
-    const t = o.when || ctx.currentTime, s = ctx.createBufferSource(); s.buffer = noise;
+    const t = o.when || now(), s = ctx.createBufferSource(); s.buffer = noise;
     const f = ctx.createBiquadFilter(); f.type = o.type || 'bandpass'; f.frequency.value = o.freq; f.Q.value = o.q || 0.8;
     if (o.freq2) f.frequency.exponentialRampToValueAtTime(Math.max(30, o.freq2), t + o.dur);
     const g = ctx.createGain();
@@ -70,7 +77,7 @@ export function createAudio() {
     s.start(t, Math.random() * 1.5); s.stop(t + o.dur + 0.03);
   }
   function tone(o) {
-    const t = o.when || ctx.currentTime, osc = ctx.createOscillator(); osc.type = o.type || 'sine';
+    const t = o.when || now(), osc = ctx.createOscillator(); osc.type = o.type || 'sine';
     osc.frequency.setValueAtTime(o.freq, t);
     if (o.freq2) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.freq2), t + o.dur);
     const g = ctx.createGain();
@@ -96,7 +103,7 @@ export function createAudio() {
     const g = GUN[weapon] || GUN[0], pl = own ? { d: 0, pan: 0.12 } : place(x, z);
     if (pl.d > 300) return;
     const att = own ? 1 : 1 / (1 + pl.d * 0.055 + pl.d * pl.d * 0.00035);
-    const when = ctx.currentTime + Math.min(0.75, pl.d / 343);
+    const when = now() + Math.min(0.75, pl.d / 343);
     const dest = out(pl.pan), far = Math.min(1, pl.d / 170), vol = g.gain * att;
     const j = 0.92 + Math.random() * 0.16;
     if (far < 0.85) burst({ dest, when, type: 'highpass', freq: g.crack * j * (1 - far * 0.6), q: 0.7, gain: vol * 0.75 * (1 - far), dur: 0.05 + g.len * 0.25, send: g.tail * 0.5 });
@@ -134,13 +141,13 @@ export function createAudio() {
   }
   function reload(weapon, dur) {
     if (!ok()) return;
-    const dest = out(0.1), t = ctx.currentTime;
+    const dest = out(0.1), t = now();
     burst({ dest, when: t + 0.12, freq: 2300, q: 3, gain: 0.16, dur: 0.045 }); tone({ dest, when: t + 0.13, freq: 420, freq2: 210, gain: 0.08, dur: 0.06, type: 'square' });
     burst({ dest, when: t + dur * 0.55, freq: 1500, q: 2.5, gain: 0.2, dur: 0.05 }); tone({ dest, when: t + dur * 0.56, freq: 300, freq2: 160, gain: 0.1, dur: 0.07, type: 'square' });
     burst({ dest, when: t + dur * 0.86, freq: 3200, q: 4, gain: 0.2, dur: 0.035 }); burst({ dest, when: t + dur * 0.9, freq: 1100, q: 2, gain: 0.22, dur: 0.06 });
   }
   function dry() { if (ok()) burst({ dest: out(0.1), freq: 3000, q: 5, gain: 0.12, dur: 0.03 }); }
-  function swap() { if (ok()) { const dest = out(0.1); burst({ dest, freq: 1300, q: 2, gain: 0.14, dur: 0.06 }); burst({ dest, when: ctx.currentTime + 0.12, freq: 2600, q: 3, gain: 0.12, dur: 0.04 }); } }
+  function swap() { if (ok()) { const dest = out(0.1); burst({ dest, freq: 1300, q: 2, gain: 0.14, dur: 0.06 }); burst({ dest, when: now() + 0.12, freq: 2600, q: 3, gain: 0.12, dur: 0.04 }); } }
   function wallDeploy(x, z) {
     if (!ok()) return;
     const pl = place(x, z);
@@ -149,7 +156,7 @@ export function createAudio() {
     tone({ dest, freq: 180, freq2: 1500, gain: 0.3 * att, dur: 0.2, type: 'sawtooth', send: 0.3 });
     tone({ dest, freq: 720, freq2: 2900, gain: 0.16 * att, dur: 0.26, type: 'sine', send: 0.4 });
     burst({ dest, type: 'highpass', freq: 5200, gain: 0.26 * att, dur: 0.32, send: 0.5 });
-    tone({ dest, when: ctx.currentTime + 0.16, freq: 95, freq2: 42, gain: 0.55 * att, dur: 0.22 });
+    tone({ dest, when: now() + 0.16, freq: 95, freq2: 42, gain: 0.55 * att, dur: 0.22 });
   }
   function wallHit(x, z) {
     if (!ok()) return;
@@ -165,12 +172,12 @@ export function createAudio() {
     if (pl.d > 90) return;
     const att = 1 / (1 + pl.d * 0.07), dest = out(pl.pan);
     burst({ dest, type: 'highpass', freq: 3600, freq2: 1400, gain: 0.5 * att, dur: 0.45, send: 0.5 });
-    for (let i = 0; i < 5; i++) tone({ dest, when: ctx.currentTime + i * 0.035, freq: 3200 - i * 380 + Math.random() * 200, gain: 0.13 * att, dur: 0.14, type: 'sine' });
+    for (let i = 0; i < 5; i++) tone({ dest, when: now() + i * 0.035, freq: 3200 - i * 380 + Math.random() * 200, gain: 0.13 * att, dur: 0.14, type: 'sine' });
     tone({ dest, freq: 130, freq2: 45, gain: 0.4 * att, dur: 0.22 });
   }
   function pickup(kind) {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     if (kind === 'ar' || kind === 'smg' || kind === 'sr') { burst({ dest, freq: 1800, q: 2.5, gain: 0.26, dur: 0.06 }); tone({ dest, when: t + 0.07, freq: 260, freq2: 180, gain: 0.16, dur: 0.09, type: 'square' }); burst({ dest, when: t + 0.14, freq: 3000, q: 4, gain: 0.2, dur: 0.04 }); }
     else if (kind === 'medkit') { tone({ dest, freq: 660, gain: 0.14, dur: 0.1 }); tone({ dest, when: t + 0.09, freq: 880, gain: 0.14, dur: 0.14 }); }
     else if (kind === 'vest' || kind === 'helmet') { burst({ dest, type: 'lowpass', freq: 900, gain: 0.3, dur: 0.1 }); tone({ dest, when: t + 0.05, freq: 520, freq2: 780, gain: 0.12, dur: 0.14, type: 'triangle' }); }
@@ -178,13 +185,13 @@ export function createAudio() {
   }
   function heal(done) {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     if (done) { tone({ dest, freq: 520, gain: 0.16, dur: 0.12 }); tone({ dest, when: t + 0.1, freq: 780, gain: 0.16, dur: 0.2 }); }
     else { burst({ dest, type: 'bandpass', freq: 3200, q: 1, gain: 0.14, dur: 0.3 }); burst({ dest, when: t + 0.5, freq: 1500, q: 2, gain: 0.12, dur: 0.08 }); }
   }
   function hitmarker(kill, head) {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     burst({ dest, freq: head ? 4200 : 3100, q: 5, gain: 0.2, dur: 0.035 }); tone({ dest, freq: head ? 2300 : 1700, gain: 0.09, dur: 0.05 });
     if (kill) { tone({ dest, when: t + 0.06, freq: 520, gain: 0.2, dur: 0.12, type: 'triangle' }); tone({ dest, when: t + 0.16, freq: 780, gain: 0.2, dur: 0.24, type: 'triangle', send: 0.3 }); }
   }
@@ -195,24 +202,24 @@ export function createAudio() {
   }
   function ui(kind) {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     if (kind === 'go') { tone({ dest, freq: 330, gain: 0.16, dur: 0.12, type: 'triangle' }); tone({ dest, when: t + 0.1, freq: 495, gain: 0.16, dur: 0.12, type: 'triangle' }); tone({ dest, when: t + 0.2, freq: 660, gain: 0.18, dur: 0.3, type: 'triangle', send: 0.4 }); }
     else { tone({ dest, freq: 900, freq2: 640, gain: 0.1, dur: 0.05 }); burst({ dest, freq: 3600, q: 4, gain: 0.07, dur: 0.02 }); }
   }
   function sting(win) {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     const notes = win ? [262, 330, 392, 523, 659] : [196, 185, 147, 110];
     notes.forEach((f, i) => { tone({ dest, when: t + i * (win ? 0.13 : 0.22), freq: f, gain: 0.2, dur: win ? 0.7 : 0.9, type: win ? 'triangle' : 'sawtooth', send: 0.6 }); tone({ dest, when: t + i * (win ? 0.13 : 0.22), freq: f * 0.5, gain: 0.12, dur: 0.9, type: 'sine' }); });
   }
   function zoneAlert() {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime;
+    const dest = out(0), t = now();
     for (let i = 0; i < 3; i++) tone({ dest, when: t + i * 0.28, freq: 440, freq2: 415, gain: 0.13, dur: 0.2, type: 'square', send: 0.3 });
   }
   function plane() {
     if (!ok()) return;
-    const dest = out(0), t = ctx.currentTime, g = ctx.createGain(), f = ctx.createBiquadFilter();
+    const dest = out(0), t = now(), g = ctx.createGain(), f = ctx.createBiquadFilter();
     f.type = 'lowpass'; f.frequency.value = 260;
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 11);
     for (const fr of [62, 93.5, 124.7]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(fr, t); o.frequency.linearRampToValueAtTime(fr * 0.86, t + 11); o.connect(f); o.start(t); o.stop(t + 11.2); }
@@ -222,8 +229,8 @@ export function createAudio() {
   // per-frame: listener pose and the continuous beds
   function update(dt, cam, st) {
     lis.x = cam.x; lis.y = cam.y; lis.z = cam.z; lis.rx = cam.rx; lis.rz = cam.rz;
-    if (!ready || ctx.state !== 'running') return;
-    const t = ctx.currentTime;
+    if (!ready || (!offline && ctx.state !== 'running')) return;
+    const t = now();
     ambGain.gain.setTargetAtTime(st.active ? 0.05 : 0.02, t, 0.5);
     windGain.gain.setTargetAtTime(st.drop ? 0.2 : st.active ? 0.012 + 0.012 * Math.sin(t * 0.3) : 0, t, 0.3);
     const near = Math.max(0, 1 - st.zoneDist / 34);
@@ -238,7 +245,7 @@ export function createAudio() {
       if (birdT <= 0) { birdT = 5 + Math.random() * 11; const dest = out((Math.random() - 0.5) * 1.6), f = 2600 + Math.random() * 1500; for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) tone({ dest, when: t + i * 0.13, freq: f, freq2: f * (1.2 + Math.random() * 0.3), gain: 0.022, dur: 0.09, send: 0.5 }); }
     }
   }
-  function silence() { if (ready) { const t = ctx.currentTime; humGain.gain.setTargetAtTime(0, t, 0.1); windGain.gain.setTargetAtTime(0, t, 0.1); } }
+  function silence() { if (ready) { const t = now(); humGain.gain.setTargetAtTime(0, t, 0.1); windGain.gain.setTargetAtTime(0, t, 0.1); } }
 
-  return { init, resume, update, silence, gunshot, impact, whiz, step, land, reload, dry, swap, wallDeploy, wallHit, wallBreak, pickup, heal, hitmarker, hurt, ui, sting, zoneAlert, plane, get state() { return ctx ? ctx.state : 'none'; } };
+  return { setTime(t) { tBase = t; }, init, resume, update, silence, gunshot, impact, whiz, step, land, reload, dry, swap, wallDeploy, wallHit, wallBreak, pickup, heal, hitmarker, hurt, ui, sting, zoneAlert, plane, get state() { return ctx ? ctx.state : 'none'; } };
 }

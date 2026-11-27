@@ -37,7 +37,7 @@ async function boot() {
   mark('island');
   progress(24, 'Mixing concrete, rust and sand');
   await next();
-  const core = createCore(canvas);
+  const core = createCore(canvas, { dpr: Number(params.get('dpr')) || 1 });
   const aniso = Math.min(8, core.renderer.capabilities.getMaxAnisotropy());
   mark('renderer');
   const T = buildTextures(aniso);
@@ -332,12 +332,20 @@ async function boot() {
   // ---------------------------------------------------------------- frame loop
   let last = performance.now(), acc = 0, fps = 60, fpsN = 0, fpsT = 0, renderTime = 0;
   const fwd = new THREE.Vector3(), frameLog = [];
+  // Video capture: the page runs on a virtual clock advanced exactly one frame per step, so the
+  // recording is perfectly smooth however long each frame takes to render and save. Sound calls
+  // are logged with their video time and rendered offline afterwards, in sync.
+  const capture = { on: false, t: 0, vms: 0, tid: 0, timers: [], log: [] };
   const worst = { frame: 0, sim: 0, render: 0, long: 0 };   // since the last resetFrameLog()
   function frame(now) {
     requestAnimationFrame(frame);
     let dt = (now - last) / 1000;
     last = now;
+    if (capture.on) return;              // video capture steps frames itself
     if (dt > 0.1) dt = 0.1;
+    tick(dt);
+  }
+  function tick(dt) {
     frameLog.push(dt * 1000); if (frameLog.length > 600) frameLog.shift();
     if (dt * 1000 > worst.frame) worst.frame = dt * 1000;
     if (dt > 0.05) worst.long++;
@@ -429,6 +437,32 @@ async function boot() {
       const inf = core.renderer.info.render, sorted = frameLog.slice().sort((a, b) => a - b);
       return { fps, frameMs: core.frameMs, p50: sorted[Math.floor(sorted.length * 0.5)] || 0, p95: sorted[Math.floor(sorted.length * 0.95)] || 0, calls: inf.calls, tris: inf.triangles, scale: core.renderScale, quality: core.quality, programs: core.renderer.info.programs ? core.renderer.info.programs.length : 0, audio: audio.state, gpuTimer: core.gpuTimer, gpuMs: core.gpuMs };
     },
+    captureBegin() {
+      if (capture.on) return;
+      capture.on = true; capture.t = 0; capture.log = [];
+      capture.vms = performance.now();
+      performance.now = () => capture.vms;
+      window.setTimeout = (fn, ms, ...a) => { const id = ++capture.tid; capture.timers.push({ id, at: capture.vms + (ms || 0), fn, a }); return id; };
+      window.clearTimeout = (id) => { capture.timers = capture.timers.filter((x) => x.id !== id); };
+      for (const k of Object.keys(audio)) {
+        if (k === 'init' || k === 'resume' || k === 'setTime' || typeof audio[k] !== 'function') continue;
+        audio[k] = (...args) => { capture.log.push([Math.round(capture.t * 10000) / 10000, k, JSON.parse(JSON.stringify(args))]); };
+      }
+    },
+    captureStep(dt) {
+      capture.t += dt; capture.vms += dt * 1000;
+      for (;;) {
+        capture.timers.sort((a, b) => a.at - b.at);
+        if (!capture.timers.length || capture.timers[0].at > capture.vms) break;
+        const tm = capture.timers.shift();
+        try { tm.fn(...tm.a); } catch (e) { errors.push(String(e)); }
+      }
+      for (const an of document.getAnimations()) { an.pause(); an.currentTime = (Number(an.currentTime) || 0) + dt * 1000; }
+      tick(dt);
+      return capture.t;
+    },
+    get captureLog() { return capture.log; },
+    get captureTime() { return capture.t; },
     resetFrameLog() { frameLog.length = 0; worst.frame = worst.sim = worst.render = 0; worst.long = 0; },
     get worst() { return { frames: frameLog.length, frameMs: +worst.frame.toFixed(1), simMs: +worst.sim.toFixed(1), renderMs: +worst.render.toFixed(1), over50ms: worst.long }; },
     evCount,

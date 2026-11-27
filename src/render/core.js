@@ -288,7 +288,8 @@ class Post {
 export function createCore(canvas, opts = {}) {
   installAtmosphere();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, stencil: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(1);
+  const dpr = Math.max(1, Math.min(2, opts.dpr || 1));   // 1 for play; 2 for crisp video capture of small views
+  renderer.setPixelRatio(dpr);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;       // refreshed on a schedule in core.render
@@ -386,7 +387,7 @@ export function createCore(canvas, opts = {}) {
   core.resize = function (w, h) {
     core.cssW = w; core.cssH = h;
     renderer.setSize(w, h, false);
-    post.setSize(w * core.renderScale, h * core.renderScale);
+    post.setSize(w * core.renderScale * dpr, h * core.renderScale * dpr);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
