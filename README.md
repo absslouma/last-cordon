@@ -1,5 +1,7 @@
 # LAST CORDON
 
+**Created by Slim ABASSI** ([@absslouma](https://github.com/absslouma)) · © 2026 · All rights reserved
+
 An original 3D third-person battle royale that runs in the browser. Twenty operators parachute
 onto a tropical island, loot, fight, and get squeezed together by a shrinking energy barrier
 (the Cordon) until one is left. Every model, texture, particle and sound is generated in code:
@@ -124,3 +126,11 @@ Other tools: `tools/tour.mjs` (screenshots and frame cost at set viewpoints),
 
 `?q=low|medium|high|auto` graphics preset, `?seed=123` fixed match seed,
 `?auto=1` let a bot play your operator, `?speed=4` run the simulation faster.
+
+## Author and license
+
+LAST CORDON was created by **Slim ABASSI**, built with Claude (Anthropic) in Claude Code.
+
+Copyright © 2026 Slim ABASSI. All rights reserved. The code is public so it can be seen; it is
+**not open source**. You may not copy, modify, redistribute or reuse it, or any part of it,
+without written permission. See [LICENSE](LICENSE) for the full terms.

@@ -2,6 +2,9 @@
   "name": "last-cordon",
   "version": "1.0.0",
   "description": "LAST CORDON - an original, fully procedural 3D third-person battle royale for the browser.",
+  "author": "Slim ABASSI (https://github.com/absslouma)",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": { "type": "git", "url": "https://github.com/absslouma/last-cordon.git" },
   "private": true,
   "type": "module",
   "scripts": {
