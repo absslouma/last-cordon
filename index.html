@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#07090b">
+<title>LAST CORDON</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d1114'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%2358c8ff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23f0a030'/%3E%3C/svg%3E">
+<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js" } }</script>
+<style>
+  :root { --ink: #ece9e1; --dim: rgba(236,233,225,.62); --amber: #f2a531; --cyan: #58c8ff; --red: #ff4a3a; --green: #6fdc7c; --panel: rgba(10,14,17,.58); --line: rgba(236,233,225,.2); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #07090b; overflow: hidden; color: var(--ink);
+    font-family: "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; }
+  canvas#view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  .layer { position: fixed; inset: 0; pointer-events: none; }
+  .hidden { display: none !important; }
+  .cap { text-transform: uppercase; letter-spacing: .14em; }
+
+  /* ---------- HUD ---------- */
+  #hud { text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+  #mapbox { position: absolute; left: 22px; top: 22px; width: 216px; }
+  #minimap { width: 216px; height: 216px; border-radius: 50%; border: 1px solid var(--line); box-shadow: 0 0 0 3px rgba(0,0,0,.35), inset 0 0 26px rgba(0,0,0,.6); background: #0b1318; display: block; }
+  #place { margin-top: 9px; font-size: 13px; text-align: center; color: var(--dim); }
+  #zonebox { margin-top: 7px; background: var(--panel); border: 1px solid var(--line); padding: 6px 9px 7px; }
+  #zonetext { font-size: 12px; display: flex; justify-content: space-between; }
+  #zonebar { height: 3px; margin-top: 5px; background: rgba(255,255,255,.14); }
+  #zonefill { height: 100%; width: 0%; background: var(--cyan); }
+  #zonebox.closing #zonetext { color: var(--cyan); }
+  #compass { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); width: 440px; height: 34px; }
+  #topright { position: absolute; right: 22px; top: 22px; text-align: right; }
+  #counts { display: flex; gap: 8px; justify-content: flex-end; }
+  .count { background: var(--panel); border: 1px solid var(--line); padding: 5px 12px 6px; min-width: 76px; }
+  .count b { display: block; font-size: 26px; line-height: 1; font-weight: 600; }
+  .count span { font-size: 10.5px; color: var(--dim); }
+  #feed { margin-top: 12px; font-size: 13.5px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .feedrow { background: rgba(10,14,17,.5); padding: 3px 9px 4px; border-right: 2px solid var(--line); opacity: 1; transition: opacity .6s; white-space: nowrap; }
+  .feedrow.me { border-right-color: var(--amber); }
+  .feedrow .k { color: var(--ink); } .feedrow .w { color: var(--dim); font-size: 11px; margin: 0 7px; } .feedrow .v { color: #c9c5bb; }
+  .feedrow .you { color: var(--amber); }
+  .feedrow.fade { opacity: 0; }
+
+  #vitals { position: absolute; left: 24px; bottom: 26px; width: 300px; }
+  .bar { height: 9px; background: rgba(0,0,0,.5); border: 1px solid var(--line); position: relative; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; display: block; }
+  #hpbar { height: 13px; } #hpbar i { background: linear-gradient(90deg, #d8d4c8, #f3efe5); }
+  #hpbar.low i { background: var(--red); }
+  #arbar { margin-bottom: 5px; height: 6px; } #arbar i { background: var(--cyan); }
+  #hprow { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  #hpnum { font-size: 34px; font-weight: 600; line-height: 1; }
+  #gear { display: flex; gap: 6px; margin-left: auto; font-size: 11px; }
+  .pip { border: 1px solid var(--line); background: var(--panel); padding: 3px 7px; color: var(--dim); }
+  .pip.on { color: var(--ink); border-color: rgba(88,200,255,.6); }
+  #kit { display: flex; gap: 8px; margin-top: 9px; }
+  .slot { background: var(--panel); border: 1px solid var(--line); padding: 5px 10px 6px; display: flex; align-items: center; gap: 9px; font-size: 12px; }
+  .slot kbd { font: inherit; font-size: 11px; border: 1px solid var(--line); padding: 0 5px; color: var(--dim); }
+  .slot b { font-size: 19px; font-weight: 600; }
+  .slot.empty { opacity: .45; }
+  #wall b { color: var(--cyan); } #med b { color: var(--green); }
+
+  #weapons { position: absolute; right: 24px; bottom: 26px; text-align: right; width: 330px; }
+  #wname { font-size: 15px; } #wclass { font-size: 10.5px; color: var(--dim); }
+  #ammo { font-size: 50px; font-weight: 600; line-height: 1.02; }
+  #ammo small { font-size: 21px; color: var(--dim); font-weight: 400; margin-left: 6px; }
+  #ammo.low { color: var(--red); }
+  #reload { height: 3px; background: rgba(255,255,255,.14); margin: 5px 0 8px auto; width: 180px; opacity: 0; }
+  #reload i { display: block; height: 100%; width: 0; background: var(--amber); }
+  #slots { display: flex; gap: 6px; justify-content: flex-end; }
+  .wslot { background: var(--panel); border: 1px solid var(--line); padding: 4px 9px 5px; font-size: 11.5px; color: var(--dim); min-width: 88px; text-align: left; }
+  .wslot kbd { font: inherit; margin-right: 6px; opacity: .7; }
+  .wslot.have { color: var(--ink); } .wslot.cur { border-color: var(--amber); box-shadow: inset 0 -2px 0 var(--amber); }
+  .wslot.none { opacity: .38; }
+
+  #cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  #cross i { position: absolute; background: var(--ink); box-shadow: 0 0 2px #000; }
+  #cross .t, #cross .b { width: 2px; height: 9px; left: -1px; } #cross .l, #cross .r { height: 2px; width: 9px; top: -1px; }
+  #cross .d { width: 2px; height: 2px; left: -1px; top: -1px; opacity: .85; }
+  #hit { position: absolute; left: 50%; top: 50%; width: 0; height: 0; opacity: 0; }
+  #hit i { position: absolute; width: 2.5px; height: 12px; background: #fff; left: -1.25px; top: -6px; box-shadow: 0 0 3px #000; }
+  #hit.kill i { background: var(--red); height: 15px; top: -7.5px; }
+  #healring { position: absolute; left: 50%; top: 50%; width: 74px; height: 74px; margin: -37px 0 0 -37px; opacity: 0; }
+  #dmgdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  .dmgarc { position: absolute; left: -90px; top: -90px; width: 180px; height: 180px; border-radius: 50%; border: 4px solid transparent; border-top-color: var(--red); opacity: 0; filter: drop-shadow(0 0 5px rgba(255,60,40,.9)); }
+  #prompt { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); font-size: 14px; background: var(--panel); border: 1px solid var(--line); padding: 7px 14px; opacity: 0; transition: opacity .25s; white-space: nowrap; }
+  #prompt kbd { font: inherit; border: 1px solid var(--amber); color: var(--amber); padding: 0 6px; margin-right: 8px; }
+  #toasts { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; font-size: 13px; }
+  .toast { background: rgba(10,14,17,.55); padding: 3px 12px; border-left: 2px solid var(--amber); animation: toast 2.4s forwards; }
+  @keyframes toast { 0% { opacity: 0; transform: translateY(8px); } 10% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  #warn { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); font-size: 15px; color: var(--cyan); background: rgba(6,20,36,.6); border: 1px solid rgba(88,200,255,.5); padding: 7px 16px; opacity: 0; transition: opacity .3s; }
+  #banner { position: absolute; left: 50%; top: 29%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity .5s; }
+  #banner b { display: block; font-size: 30px; font-weight: 600; letter-spacing: .2em; } #banner span { font-size: 13px; color: var(--dim); }
+  #dropinfo { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); text-align: center; font-size: 14px; }
+  #dropinfo b { display: block; font-size: 38px; font-weight: 600; }
+  #vig { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(190,20,10,.55) 100%); opacity: 0; }
+  #zonevig { background: radial-gradient(ellipse at center, rgba(20,80,200,0) 40%, rgba(20,90,230,.42) 100%); opacity: 0; transition: opacity .4s; }
+  #scope { opacity: 0; background: radial-gradient(circle at center, rgba(0,0,0,0) 0, rgba(0,0,0,0) calc(38vh - 2px), #000 38vh); }
+  #scope::before, #scope::after { content: ""; position: absolute; background: rgba(0,0,0,.85); }
+  #scope::before { left: 50%; top: 12vh; bottom: 12vh; width: 1.5px; margin-left: -.75px; } #scope::after { top: 50%; left: calc(50% - 38vh); right: calc(50% - 38vh); height: 1.5px; margin-top: -.75px; }
+  .dn { position: absolute; left: 0; top: 0; font-size: 19px; font-weight: 600; color: #ffd84a; text-shadow: 0 0 3px #000, 0 1px 2px #000; will-change: transform, opacity; white-space: nowrap; }
+  .dn.head { color: #ff3b30; font-size: 24px; }
+  #bigmap { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(78vh, 760px); height: min(78vh, 760px); border: 1px solid var(--line); background: #0b1318; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  #perf { position: absolute; left: 250px; top: 22px; font: 11px/1.45 Consolas, monospace; color: #9fe8a8; background: rgba(0,0,0,.5); padding: 4px 7px; white-space: pre; }
+
+  /* ---------- screens ---------- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; }
+  #loading { background: #07090b; z-index: 30; }
+  #loading b { font-size: 34px; letter-spacing: .34em; font-weight: 600; } #loadmsg { margin-top: 14px; font-size: 12px; color: var(--dim); }
+  #loadbar { width: 300px; height: 2px; background: rgba(255,255,255,.14); margin-top: 16px; } #loadfill { height: 100%; width: 4%; background: var(--amber); transition: width .25s; }
+  #menu { background: linear-gradient(90deg, rgba(5,8,10,.9) 0%, rgba(5,8,10,.72) 36%, rgba(5,8,10,0) 72%); align-items: flex-start; padding-left: 7vw; z-index: 20; }
+  #menu h1 { margin: 0; font-size: clamp(46px, 7vw, 92px); letter-spacing: .12em; font-weight: 600; line-height: .95; }
+  #menu h1 em { font-style: normal; color: var(--cyan); }
+  #tag { margin: 12px 0 26px; font-size: 14px; color: var(--dim); }
+  .btn { pointer-events: auto; font: inherit; color: #0b0d0f; background: var(--amber); border: 0; padding: 14px 44px 15px; font-size: 17px; font-weight: 600; letter-spacing: .26em; text-transform: uppercase; cursor: pointer; }
+  .btn:hover { background: #ffc15e; } .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 9px 20px 10px; font-size: 12px; letter-spacing: .16em; }
+  .btn.ghost:hover { border-color: var(--ink); background: rgba(255,255,255,.06); }
+  .btn.ghost.on { border-color: var(--amber); color: var(--amber); }
+  .opts { display: flex; gap: 26px; margin-top: 22px; } .opt span { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 6px; } .opt div { display: flex; gap: 5px; }
+  #keys { margin-top: 30px; display: grid; grid-template-columns: repeat(2, auto); gap: 5px 34px; font-size: 12.5px; color: var(--dim); }
+  #keys kbd { font: inherit; display: inline-block; min-width: 74px; color: var(--ink); }
+  #note { margin-top: 22px; font-size: 11px; color: rgba(236,233,225,.4); max-width: 430px; line-height: 1.5; }
+  #pause { background: rgba(5,8,10,.6); z-index: 15; cursor: pointer; } #pause b { font-size: 30px; letter-spacing: .3em; font-weight: 600; } #pause span { margin-top: 10px; font-size: 13px; color: var(--dim); }
+  #end { background: radial-gradient(ellipse at center, rgba(5,8,10,.55), rgba(5,8,10,.9)); z-index: 18; }
+  #endtitle { font-size: clamp(34px, 5.4vw, 66px); letter-spacing: .2em; font-weight: 600; text-align: center; }
+  #end.win #endtitle { color: var(--amber); } #end.loss #endtitle { color: var(--ink); }
+  #endplace { margin-top: 6px; font-size: 20px; color: var(--dim); } #endplace b { color: var(--ink); font-size: 30px; font-weight: 600; }
+  #endsub { margin-top: 10px; font-size: 13px; color: var(--dim); }
+  #stats { display: flex; gap: 10px; margin: 26px 0 28px; } .stat { background: var(--panel); border: 1px solid var(--line); padding: 10px 20px 11px; min-width: 118px; text-align: center; }
+  .stat b { display: block; font-size: 27px; font-weight: 600; } .stat span { font-size: 10.5px; color: var(--dim); }
+  #endhint { margin-top: 14px; font-size: 11.5px; color: var(--dim); }
+
+  /* ---------- touch controls (phones and tablets) ---------- */
+  body.touch { touch-action: none; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  #tc { z-index: 5; }
+  #tc .tcz { position: absolute; pointer-events: auto; touch-action: none; }
+  #tc-move { left: 0; top: 36%; bottom: 0; width: 42%; }
+  #tc-look { left: 42%; top: 0; right: 0; bottom: 0; }
+  #tc-stick { position: absolute; left: 0; top: 0; border-radius: 50%; border: 2px solid rgba(236,233,225,.28); background: radial-gradient(circle, rgba(10,14,17,.18), rgba(10,14,17,.42)); pointer-events: none; opacity: .55; transition: opacity .15s; }
+  #tc-stick.live { opacity: 1; transition: none; }
+  #tc-stick i { position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; border-radius: 50%; background: rgba(236,233,225,.78); box-shadow: 0 2px 8px rgba(0,0,0,.5); transform: translate(-50%,-50%); }
+  #tc .tcb { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10,14,17,.46); border: 1.5px solid rgba(236,233,225,.32); color: var(--ink); font-size: calc(10px * var(--tcs, 1)); letter-spacing: .1em; text-transform: uppercase; text-shadow: 0 1px 2px #000; user-select: none; -webkit-user-select: none; }
+  #tc .tcb b { font-size: calc(15px * var(--tcs, 1)); line-height: 1; margin-top: 2px; font-weight: 600; }
+  #tc .tcb.down { background: rgba(242,165,49,.42); border-color: var(--amber); }
+  #tc .tcb.on { border-color: var(--amber); color: var(--amber); box-shadow: inset 0 0 0 2px rgba(242,165,49,.35); }
+  #tc .tcb.empty { opacity: .38; }
+  #tc .tcb.fire { background: rgba(120,30,20,.38); border: 2px solid rgba(255,120,90,.6); color: #ffd9cf; }
+  #tc .tcb.fire.down { background: rgba(255,80,50,.5); }
+  #tc .tcb.kit[data-a="wall"] b { color: var(--cyan); } #tc .tcb.kit[data-a="heal"] b { color: var(--green); }
+  #tc-top { position: absolute; top: 8px; left: 170px; display: flex; gap: 6px; pointer-events: none; }
+  #tc .tcs { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); padding: 7px 12px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+  #tc-slots { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; pointer-events: none; }
+  #tc .tcw { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); padding: 7px 10px; min-width: 70px; text-align: center; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); opacity: .45; }
+  #tc .tcw.have { opacity: 1; color: var(--ink); } #tc .tcw.cur { border-color: var(--amber); box-shadow: inset 0 -2px 0 var(--amber); color: var(--amber); }
+  #tc.drop .tcb, #tc.drop #tc-slots, #tc.drop #tc-look { display: none; }
+  #tc.mapopen .tcz, #tc.mapopen .tcb, #tc.mapopen #tc-stick, #tc.mapopen #tc-slots { display: none; }
+
+  body.touch #mapbox { left: 10px; top: 8px; width: 150px; }
+  body.touch #minimap { width: 124px; height: 124px; pointer-events: auto; }
+  body.touch #bigmap { pointer-events: auto; width: min(84vh, 760px); height: min(84vh, 760px); }
+  body.touch #place { margin-top: 4px; font-size: 10px; }
+  body.touch #zonebox { margin-top: 4px; padding: 3px 6px 4px; } body.touch #zonetext { font-size: 9.5px; letter-spacing: .06em; white-space: nowrap; gap: 6px; }
+  body.touch #compass, body.touch #kit, body.touch #slots, body.touch #wname, body.touch #wclass, body.touch #perf { display: none; }
+  body.touch #topright { right: 10px; top: 8px; }
+  body.touch .count { min-width: 50px; padding: 3px 8px 4px; } body.touch .count b { font-size: 19px; } body.touch .count span { font-size: 9px; }
+  body.touch #counts { gap: 5px; }
+  body.touch #feed { font-size: 10.5px; margin-top: 6px; } body.touch .feedrow:nth-last-child(n+4) { display: none; }
+  body.touch #vitals { left: 50%; transform: translateX(-50%); bottom: 8px; width: 230px; }
+  body.touch #hprow { margin-bottom: 3px; } body.touch #hpnum { font-size: 21px; } body.touch #gear { font-size: 9px; } body.touch .pip { padding: 1px 5px; }
+  body.touch #hpbar { height: 9px; } body.touch #arbar { height: 4px; margin-bottom: 3px; }
+  body.touch #weapons { right: auto; left: 50%; transform: translateX(-50%); top: 44px; bottom: auto; width: 200px; text-align: center; }
+  body.touch #ammo { font-size: 24px; } body.touch #ammo small { font-size: 13px; }
+  body.touch #reload { margin: 3px auto 0; width: 120px; }
+  body.touch #prompt { top: 64%; font-size: 12px; } body.touch #toasts { bottom: 96px; font-size: 11px; }
+  body.touch #banner { top: 26%; } body.touch #banner b { font-size: 22px; } body.touch #warn { top: 30%; font-size: 12px; }
+  body.touch #dropinfo { bottom: 24%; font-size: 12px; } body.touch #dropinfo b { font-size: 30px; }
+  body.touch .dn { font-size: 16px; } body.touch .dn.head { font-size: 20px; }
+  @media (max-width: 760px) { body.touch #vitals { left: 12px; transform: none; width: 180px; } }
+  body.touch #menu { padding: 14px 6vw; justify-content: center; overflow-y: auto; }
+  body.touch #menu h1 { font-size: 40px; } body.touch #tag { margin: 8px 0 14px; font-size: 11px; }
+  body.touch #keys, body.touch #note { display: none; }
+  body.touch .opts { flex-wrap: wrap; gap: 10px 22px; margin-top: 14px; } body.touch .btn.ghost { padding: 8px 12px 9px; font-size: 11px; }
+  #sensopt, #touchkeys { display: none; } body.touch #sensopt { display: block; }
+  body.touch #touchkeys { display: block; margin-top: 14px; font-size: 11.5px; color: var(--dim); line-height: 1.6; max-width: 520px; }
+  body.touch #touchkeys b { color: var(--ink); font-weight: 600; }
+  body.touch #endtitle { font-size: 30px; } body.touch #stats { margin: 14px 0 16px; gap: 6px; } body.touch .stat { min-width: 76px; padding: 6px 10px 7px; } body.touch .stat b { font-size: 20px; }
+  body.touch #endhint { display: none; }
+  #endbtns { display: flex; gap: 10px; align-items: center; }
+  #rotate { display: none; position: fixed; inset: 0; z-index: 40; background: #07090b; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; padding: 24px; }
+  #rotate b { font-size: 20px; letter-spacing: .2em; } #rotate span { font-size: 13px; color: var(--dim); }
+  @media (orientation: portrait) { body.touch #rotate { display: flex; } }
+
+  /* ---------- multiplayer lobby ---------- */
+  #mp, #room { z-index: 21; background: linear-gradient(90deg, rgba(5,8,10,.94), rgba(5,8,10,.78)); overflow-y: auto; padding: 24px 16px; }
+  .mpbox { width: min(640px, 100%); display: flex; flex-direction: column; gap: 12px; }
+  .mphead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .mphead h2 { margin: 0; font-size: 28px; letter-spacing: .14em; font-weight: 600; }
+  #mpstatus, #roomstatus { font-size: 12px; color: var(--dim); min-height: 16px; }
+  #mpstatus.bad, #roomstatus.bad { color: var(--red); }
+  .mplabel { font-size: 10.5px; color: var(--dim); letter-spacing: .14em; text-transform: uppercase; }
+  .mprow { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+  .mpbox input { font: inherit; font-size: 15px; color: var(--ink); background: rgba(10,14,17,.8); border: 1px solid var(--line); padding: 10px 12px; min-width: 0; flex: 1 1 180px; user-select: text; -webkit-user-select: text; }
+  .mpbox input:focus { outline: 1px solid var(--amber); }
+  .mpbox .btn { padding: 11px 22px 12px; font-size: 14px; }
+  .mpbox .btn.ghost { padding: 9px 16px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  #mplist { display: flex; flex-direction: column; gap: 6px; }
+  .mproom { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; }
+  .mproom > div:first-child { flex: 1; min-width: 0; } .mproom b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mproom span { font-size: 11px; color: var(--dim); letter-spacing: .06em; } .mpn { font-size: 16px; font-variant-numeric: tabular-nums; color: var(--dim); }
+  .mpempty { font-size: 12.5px; color: var(--dim); padding: 14px 0; }
+  #roomplayers { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  .rp { background: var(--panel); border: 1px solid var(--line); padding: 8px 10px; font-size: 13px; display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .rp span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rp.me { border-color: var(--amber); }
+  .rp i { font-style: normal; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
+  .rpcount { grid-column: 1 / -1; font-size: 11px; color: var(--dim); }
+  #roomsettings { display: flex; gap: 22px; flex-wrap: wrap; }
+  #roomsettings .opt span { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 6px; } #roomsettings .opt div { display: flex; gap: 5px; }
+  #menubtns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .feedrow .hum { color: var(--cyan); }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="vig" class="layer"></div>
+<div id="zonevig" class="layer"></div>
+<div id="scope" class="layer"></div>
+<div id="numbers" class="layer"></div>
+
+<div id="hud" class="layer hidden">
+  <div id="mapbox">
+    <canvas id="minimap" width="216" height="216"></canvas>
+    <div id="place" class="cap">&nbsp;</div>
+    <div id="zonebox"><div id="zonetext" class="cap"><span id="zonelabel">Cordon holds</span><span id="zonetime">0:00</span></div><div id="zonebar"><div id="zonefill"></div></div></div>
+  </div>
+  <canvas id="compass" width="440" height="34"></canvas>
+  <div id="topright">
+    <div id="counts">
+      <div class="count"><b id="alive">20</b><span class="cap">Alive</span></div>
+      <div class="count"><b id="kills">0</b><span class="cap">Kills</span></div>
+    </div>
+    <div id="feed"></div>
+  </div>
+  <div id="vitals">
+    <div id="hprow"><span id="hpnum">100</span><div id="gear"><span id="pvest" class="pip cap">Vest</span><span id="phelm" class="pip cap">Helmet</span></div></div>
+    <div id="arbar" class="bar"><i></i></div>
+    <div id="hpbar" class="bar"><i></i></div>
+    <div id="kit">
+      <div id="med" class="slot"><kbd>H</kbd><span class="cap">Medkit</span><b>0</b></div>
+      <div id="wall" class="slot"><kbd>G</kbd><span class="cap">Bulwark</span><b>3</b></div>
+    </div>
+  </div>
+  <div id="weapons">
+    <div id="wname" class="cap">Unarmed</div><div id="wclass" class="cap">Find a weapon</div>
+    <div id="ammo">--<small>/ --</small></div>
+    <div id="reload"><i></i></div>
+    <div id="slots">
+      <div class="wslot none" data-s="0"><kbd>1</kbd>WARDEN</div><div class="wslot none" data-s="1"><kbd>2</kbd>HORNET</div><div class="wslot none" data-s="2"><kbd>3</kbd>LANCE</div>
+    </div>
+  </div>
+  <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="d"></i></div>
+  <div id="hit"><i style="transform:rotate(45deg) translateY(-13px)"></i><i style="transform:rotate(135deg) translateY(-13px)"></i><i style="transform:rotate(225deg) translateY(-13px)"></i><i style="transform:rotate(315deg) translateY(-13px)"></i></div>
+  <svg id="healring" viewBox="0 0 74 74"><circle cx="37" cy="37" r="32" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3"/><circle id="healarc" cx="37" cy="37" r="32" fill="none" stroke="#6fdc7c" stroke-width="3" stroke-dasharray="201" stroke-dashoffset="201" transform="rotate(-90 37 37)"/></svg>
+  <div id="dmgdir"></div>
+  <div id="prompt"></div>
+  <div id="toasts"></div>
+  <div id="warn" class="cap">Outside the Cordon &mdash; move in</div>
+  <div id="banner"><b id="bannert" class="cap"></b><span id="banners" class="cap"></span></div>
+  <div id="dropinfo" class="cap hidden"><b id="alt">150 m</b>Steer with <span style="color:var(--amber)">W A S D</span> &middot; land near buildings for gear</div>
+  <canvas id="bigmap" class="hidden" width="760" height="760"></canvas>
+  <div id="perf" class="hidden"></div>
+</div>
+
+<div id="pause" class="screen hidden"><b class="cap">Paused</b><span class="cap">Click to resume</span></div>
+
+<div id="end" class="screen hidden">
+  <div id="endtitle" class="cap"></div>
+  <div id="endplace" class="cap"></div>
+  <div id="endsub" class="cap"></div>
+  <div id="stats">
+    <div class="stat"><b id="skills">0</b><span class="cap">Kills</span></div>
+    <div class="stat"><b id="sdmg">0</b><span class="cap">Damage</span></div>
+    <div class="stat"><b id="sacc">0%</b><span class="cap">Accuracy</span></div>
+    <div class="stat"><b id="shead">0</b><span class="cap">Headshots</span></div>
+    <div class="stat"><b id="stime">0:00</b><span class="cap">Survived</span></div>
+  </div>
+  <div id="endbtns"><button id="again" class="btn">Redeploy</button><button id="tomenu" class="btn ghost">Main menu</button></div>
+  <div id="endhint" class="cap">Enter &middot; redeploy &nbsp;&nbsp; Esc &middot; main menu</div>
+</div>
+
+<div id="menu" class="screen hidden">
+  <h1>LAST<br><em>CORDON</em></h1>
+  <div id="tag" class="cap">Twenty drop &middot; the barrier closes &middot; one walks out</div>
+  <div id="menubtns"><button id="deploy" class="btn">Deploy</button><button id="multi" class="btn ghost">Multiplayer</button></div>
+  <div class="opts">
+    <div class="opt"><span class="cap">Opposition</span><div id="diff"><button class="btn ghost" data-v="0.7">Recruit</button><button class="btn ghost on" data-v="1">Regular</button><button class="btn ghost" data-v="1.35">Veteran</button></div></div>
+    <div class="opt" id="sensopt"><span class="cap">Look speed</span><div id="sens"><button class="btn ghost" data-v="1.6">Slow</button><button class="btn ghost on" data-v="2.4">Normal</button><button class="btn ghost" data-v="3.4">Fast</button></div></div>
+    <div class="opt"><span class="cap">Graphics</span><div id="qual"><button class="btn ghost on" data-v="auto">Auto</button><button class="btn ghost" data-v="low">Low</button><button class="btn ghost" data-v="medium">Medium</button><button class="btn ghost" data-v="high">High</button></div></div>
+  </div>
+  <div id="keys">
+    <div><kbd>W A S D</kbd>Move</div><div><kbd>Mouse</kbd>Look</div>
+    <div><kbd>Shift</kbd>Sprint</div><div><kbd>Left click</kbd>Fire</div>
+    <div><kbd>Space</kbd>Jump</div><div><kbd>Right click</kbd>Aim / scope</div>
+    <div><kbd>C</kbd>Crouch</div><div><kbd>R</kbd>Reload</div>
+    <div><kbd>G</kbd>Deploy Bulwark wall</div><div><kbd>1 2 3</kbd>Switch weapon</div>
+    <div><kbd>H</kbd>Use medkit</div><div><kbd>M</kbd>Map</div>
+  </div>
+  <div id="touchkeys"><b>Left thumb</b> moves (push all the way forward to sprint). <b>Right thumb</b> drags to look.
+    Hold <b>Fire</b> to shoot and slide it to keep aiming. <b>Aim</b> toggles the sights or scope, <b>Wall</b> throws a Bulwark, <b>Heal</b> uses a medkit.
+    Tap a weapon name at the top to switch, tap the minimap for the full map. Walk over glowing crates to loot.</div>
+  <div id="note">Walk over glowing crates to pick them up. Stay inside the blue Cordon. Everything you see and hear is generated in code.</div>
+</div>
+
+<div id="mp" class="screen hidden">
+  <div class="mpbox">
+    <div class="mphead"><h2 class="cap">Multiplayer</h2><button id="mpback" class="btn ghost">Back</button></div>
+    <div id="mpstatus"></div>
+    <div class="mplabel">Your name</div>
+    <div class="mprow"><input id="mpname" maxlength="16" autocomplete="off" spellcheck="false"></div>
+    <div class="mplabel">New room</div>
+    <div class="mprow"><input id="mproomname" maxlength="16" placeholder="Room name" autocomplete="off" spellcheck="false"><button id="mpcreate" class="btn">Create room</button></div>
+    <div class="mplabel">Rooms on this network</div>
+    <div id="mplist"></div>
+  </div>
+</div>
+
+<div id="room" class="screen hidden">
+  <div class="mpbox">
+    <div class="mphead"><h2 id="roomname"></h2><button id="roomleave" class="btn ghost">Leave room</button></div>
+    <div id="roomstatus"></div>
+    <div id="roomplayers"></div>
+    <div id="roomsettings"></div>
+    <div class="mprow"><button id="roomstart" class="btn">Start match</button></div>
+  </div>
+</div>
+
+<div id="rotate"><b>ROTATE</b><span>Turn your phone sideways to play</span></div>
+
+<div id="loading" class="screen"><b>LAST CORDON</b><div id="loadbar"><div id="loadfill"></div></div><div id="loadmsg" class="cap">Starting up</div></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

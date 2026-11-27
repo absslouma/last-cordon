@@ -1,0 +1,23 @@
+{
+  "name": "last-cordon",
+  "version": "1.0.0",
+  "description": "LAST CORDON - an original, fully procedural 3D third-person battle royale for the browser.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs --open",
+    "serve": "node server.mjs",
+    "test": "node tools/verify.mjs",
+    "verify": "node tools/verify.mjs",
+    "simtest": "node tools/simtest.mjs 30",
+    "touchtest": "node tools/touchtest.mjs",
+    "mptest": "node tools/mptest.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.17.0"
+  },
+  "dependencies": {
+    "three": "0.187.0",
+    "ws": "^8.22.2"
+  }
+}
